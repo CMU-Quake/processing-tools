@@ -1,5 +1,5 @@
 
-function [t,dis,vel,acc,flag] = read_scec_station(scecdir,stationname,doplot)
+function [t,dis,vel,acc,flag] = read_scec_station(scecdir,stationname,doplot, buftime)
 
 DT        = 0.025;
 FMIN      = 0.15;
@@ -9,10 +9,11 @@ ORDERHIGH = 3;
 RP        = 0.5;
 RAMP      = 0.05;
 EQTIME    = [4; 9; 42.97];
+BUFFER    = buftime; % seconds before earthquake
 % Point source BUFTIME
 %BUFFER    = -0.875; %1.21; % seconds before the earthquake
 % Extended source BUFTIME
-BUFFER    = -0.984250; %1.21; % seconds before the earthquake
+%BUFFER    = -0.984250; %1.21; % seconds before the earthquake
 SIMTIME   = 100;
 
 flag = 0;
@@ -29,6 +30,7 @@ format  = 'ascii';
 
 last = length(stationname);
 last = stationname(last);
+channeltype = stationname(length(stationname)-2);
 stationname = stationname(1:length(stationname)-1);
 
 if last == 'N'
@@ -188,37 +190,92 @@ cornerlow = FMAX / ( (1/dt)/2 );
 cornerhigh = FMIN / ( (1/dt)/2 );
 [bh,ah] = cheby1(ORDERHIGH,RP,cornerhigh,'high');
 
-% Compute velocities
-% ------------------
+if (channeltype == 'H') % Channel is HH*
 
-vel = zeros(samples,3);
+    % Compute velocities
+    % ------------------
 
-vel(:,1) = integrate_signal(acc(:,1),dt);
-vel(:,2) = integrate_signal(acc(:,2),dt);
-vel(:,3) = integrate_signal(acc(:,3),dt);
+    vel = zeros(samples,3);
 
-% Filter before integrating
-% -------------------------
+    vel(:,1) = integrate_signal(acc(:,1),dt);
+    vel(:,2) = integrate_signal(acc(:,2),dt);
+    vel(:,3) = integrate_signal(acc(:,3),dt);
 
-vel(:,1) = filter(bh,ah,vel(:,1));
-vel(:,2) = filter(bh,ah,vel(:,2));
-vel(:,3) = filter(bh,ah,vel(:,3));
+    % Filter before integrating
+    % -------------------------
 
-% Compute displacements
-% ---------------------
+    vel(:,1) = filter(bh,ah,vel(:,1));
+    vel(:,2) = filter(bh,ah,vel(:,2));
+    vel(:,3) = filter(bh,ah,vel(:,3));
 
-dis = zeros(samples,3);
+    % Compute displacements
+    % ---------------------
 
-dis(:,1) = integrate_signal(vel(:,1),dt);
-dis(:,2) = integrate_signal(vel(:,2),dt);
-dis(:,3) = integrate_signal(vel(:,3),dt);
+    dis = zeros(samples,3);
 
-% Filter
-% ------
+    dis(:,1) = integrate_signal(vel(:,1),dt);
+    dis(:,2) = integrate_signal(vel(:,2),dt);
+    dis(:,3) = integrate_signal(vel(:,3),dt);
 
-dis(:,1) = filter(bh,ah,dis(:,1));
-dis(:,2) = filter(bh,ah,dis(:,2));
-dis(:,3) = filter(bh,ah,dis(:,3));
+    % Filter
+    % ------
+
+    dis(:,1) = filter(bh,ah,dis(:,1));
+    dis(:,2) = filter(bh,ah,dis(:,2));
+    dis(:,3) = filter(bh,ah,dis(:,3));
+    
+elseif (channeltype == 'B') % Channel type is BH*
+    
+    % BH* channels are velocity
+    % -------------------------
+
+    vel = zeros(samples,3);
+    
+    vel(:,1) = acc(:,1);
+    vel(:,2) = acc(:,2);
+    vel(:,3) = acc(:,3);
+
+    % Filter before integrating
+    % -------------------------
+
+    vel(:,1) = filter(bh,ah,vel(:,1));
+    vel(:,2) = filter(bh,ah,vel(:,2));
+    vel(:,3) = filter(bh,ah,vel(:,3));
+
+    % Compute displacements
+    % ---------------------
+
+    dis = zeros(samples,3);
+
+    dis(:,1) = integrate_signal(vel(:,1),dt);
+    dis(:,2) = integrate_signal(vel(:,2),dt);
+    dis(:,3) = integrate_signal(vel(:,3),dt);
+
+    % Filter
+    % ------
+
+    dis(:,1) = filter(bh,ah,dis(:,1));
+    dis(:,2) = filter(bh,ah,dis(:,2));
+    dis(:,3) = filter(bh,ah,dis(:,3));
+    
+    % Compute accelerations
+    % ---------------------
+    acc(:,1) = derivate_signal(vel(:,1),dt);
+    acc(:,2) = derivate_signal(vel(:,2),dt);
+    acc(:,3) = derivate_signal(vel(:,3),dt);
+    
+    % Filter
+    % ------
+
+    acc(:,1) = filter(bh,ah,acc(:,1));
+    acc(:,2) = filter(bh,ah,acc(:,2));
+    acc(:,3) = filter(bh,ah,acc(:,3));
+    
+else
+    fprintf('Error: Unrecognized channel type %s', channeltype);
+    flag = -4;
+    return;
+end
 
 % Lowpass filters
 acc(:,1) = filter(bl,al,acc(:,1));

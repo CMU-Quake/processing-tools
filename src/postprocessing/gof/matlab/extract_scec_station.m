@@ -1,7 +1,7 @@
 
-function flag = extract_scec_station(dirin,dirout,station,doplot)
+function flag = extract_scec_station(dirin,dirout,station,doplot, buftime)
 
-[t,dis,vel,acc,flag] = read_scec_station(dirin,station,doplot);
+[t,dis,vel,acc,flag] = read_scec_station(dirin,station,doplot, buftime);
 
 if flag ~= 1
     return;
