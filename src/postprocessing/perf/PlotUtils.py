@@ -20,10 +20,10 @@ mtl.use('Agg') # Disables use of Tk/X11
 import matplotlib.mpl as mpl
 mpl.rcParams['font.size'] = 10.
 import matplotlib.pyplot as plt
-from mpl_toolkits.basemap import Basemap
+import matplotlib.ticker as ticker
 import matplotlib.colors as mcolors 
 import matplotlib.cm as cm
-
+from mpl_toolkits.basemap import Basemap
 
 class PlotUtils:
 
@@ -282,13 +282,22 @@ class PlotUtils:
         ax.set_xlabel('%s (%s)' % (labels[0], units[0]))
         ax.set_ylabel('%s (%s)' % (labels[1], units[1]))
 
-        ax.imshow(points, cmap=cmap, norm=norm, interpolation='nearest') 
+        ax.imshow(points, cmap=cmap, norm=norm, origin='lower', \
+                      interpolation='nearest') 
 
         dims = points.shape
-        
+
+        # Setup grid lines
+        ax.grid(True, color="white")
+
         # Setup custom axis
-        ax.set_xlim(0, dims[1]-1)
-        ax.set_ylim(0, dims[0]-1)
+        #ax.set_xlim(0, dims[1]-1)
+        #ax.set_ylim(0, dims[0]-1)
+
+        # Use integer tick locations only
+        ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+        ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
         if (invert_y):
             ax.invert_yaxis()
 

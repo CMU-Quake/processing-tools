@@ -45,14 +45,13 @@ statlabels = {'proc':'Processors','cpu_flops':'CPU FLOPs',
 PLOT_MAP_LOC = [0.15, 0.2, 0.7, 0.7]
 
 class PlotHeatMap:
-    def __init__(self, outfile, infile, field, cart, \
+    def __init__(self, outfile, infile, field, cart, title, \
                      color=None, discretize=None, scale=None):
         self.valid = False
         self.outfile = outfile
         self.point1 = [0.0, 0.0]
         self.point2 = [0.0, 0.0]
         self.infile = infile
-        self.field= field
         stokens = cart.split(',')
         self.cart = [int(stokens[0]), int(stokens[1])]
         self.color = color
@@ -61,6 +60,34 @@ class PlotHeatMap:
         else:
             self.discretize = [False, 6]
         self.scale = scale;
+
+        # Parse field list
+        ftokens = field.split('/')
+        self.fields = [ftokens[0]]
+        if (len(ftokens) > 1):
+            self.fields.append(ftokens[1])
+            
+        # Construct plot title
+        if (len(self.fields) > 1):
+            self.pltitle = "%s %s/%s" % (title, statlabels[self.fields[0]], \
+                                                  statunits[self.fields[1]])
+        else:
+            self.pltitle = "Plot of %s" % (statlabels[self.fields[0]])
+
+        # Construct color bar title
+        if (len(self.fields) > 1):
+            self.cbtitle = "%s/%s" % (statlabels[self.fields[0]], \
+                                                  statunits[self.fields[1]])
+        else:
+            self.cbtitle = "%s" % (statlabels[self.fields[0]])
+
+        # Construct color bar units
+        if (len(self.fields) > 1):
+            self.cbunits = "%s/%s" % (statunits[self.fields[0]], \
+                                          statunits[self.fields[1]])
+        else:
+            self.cbunits = "%s" % (statunits[self.fields[0]])
+
         self.valid = True
 
     def isValid(self):
@@ -84,15 +111,22 @@ class PlotHeatMap:
             i = i + 1
         lines = lines[i:]
 
-        # Define data array and extract desired field
         numprocs = len(lines);
+        if (numprocs != self.cart[0]*self.cart[1]):
+            print "Unexpected number of PE data points in %s" % (self.infile)
+            sys.exit(1)
+
+        # Define data array and extract desired field
         data = np.arange(numprocs, dtype=float)
         for i in xrange(0, numprocs):
             tokens = lines[i].split()
-            data[i] = tokens[statformat[self.field]]
+            if (len(self.fields) > 1):
+                data[i] = float(tokens[statformat[self.fields[0]]]) \
+                    / float(tokens[statformat[self.fields[1]]])
+            else:
+                data[i] = float(tokens[statformat[self.fields[0]]])
 
         data = data.reshape(self.cart[0], self.cart[1])
-        #print data
         return(data)
 
     def main(self):
@@ -105,7 +139,7 @@ class PlotHeatMap:
         # Setup color scale. Select color map style, discretize it if
         # necessary
         if (self.color == None):
-            cmap = cm.Spectral
+            cmap = cm.Spectral_r
         else:
             cmap = eval("cm.%s" % (self.color))
         if (self.discretize[0]):
@@ -126,10 +160,10 @@ class PlotHeatMap:
         fig = plt.figure(figsize=(plot_x_size,plot_y_size))
         PlotUtils().plotGridArray(fig, PLOT_MAP_LOC, points, \
                                       ['X', 'Y'], ['PEs', 'PEs'], \
-                                      cmap, norm, statlabels[self.field])
+                                      cmap, norm, self.pltitle)
 
         # Plot the colorbar
-        PlotUtils().plotColorbar(self.field, statunits[self.field], \
+        PlotUtils().plotColorbar(self.cbtitle, self.cbunits, \
                                      cmap, norm, value_min, value_max, \
                                      self.discretize[1])
         # Save the plot
@@ -143,16 +177,19 @@ class PlotHeatMapScript:
         self.argv = argv
 
     def usage(self):
-        print "Usage: " + sys.argv[0] + " [-c color] [-d bool,#] [-s min,max] <outfile> <infile> <field> <cart>"
-        print "Example: " + sys.argv[0] + " test.png data.in Test\n"
+        print "Usage: " + sys.argv[0] + " [-c color] [-d bool,#] [-s min,max] <infile> <field> <cart> <title> <outfile>"
+        print "Example 1: " + sys.argv[0] + " stat-perf.txt cpu_flops 2,2 \"Solver \" plot.png\n"
+        print "Example 2: " + sys.argv[0] + " stat-perf.txt cpu_flops/cpu_elapsed 4,8 \"Solver \" plot.png\n"
         print "\t[-h]: This help message"
-        print "\t[-c]: Set custom color bar (default: Spectral)"
+        print "\t[-c]: Set custom color bar (default: Spectral_r)"
         print "\t[-d]: Set color bar discretization (default: false,10)"
         print "\t[-s]: Set custom scale"
-        print "\t<outfile>: Filename for plot"
-        print "\t<infile>: Data source"
-        print "\t<field>: Field for plot\n"
-        print "\t<cart>: Cartesian grid\n"
+        print "\t<infile> : Data source"
+        print "\t<field>  : Field(s) to plot (may specify rate with f1/f2)" 
+        print "\t\tFields : " + str(statformat.keys())
+        print "\t<cart>   : Cartesian grid (eg: 2,2)"
+        print "\t<title>  : Plot title"
+        print "\t<outfile>: Filename for plot\n"
         sys.exit(1)
 
 
@@ -193,15 +230,16 @@ class PlotHeatMapScript:
                 return(1)
 
         # Check command line arguments
-        if (len(args) < 4):
+        if (len(args) < 5):
             self.usage()
 
-        outfile = args[0]
-        infile = args[1]
-        field = args[2]
-        cart = args[3]
+        infile = args[0]
+        field = args[1]
+        cart = args[2]
+        title = args[3]
+        outfile = args[4]
 
-        prog = PlotHeatMap(outfile, infile, field, cart, \
+        prog = PlotHeatMap(outfile, infile, field, cart, title, \
                            color, discretize, scale)
         if (prog.isValid() == False):
             return(1)
