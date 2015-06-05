@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 ############################################################################
 #
-# Script: PlotHeatMap.py
+# Script: PlotHeatMapCPU.py
 #
-# Description: Plot heat map for Hercules performance statistics
+# Description: Plot heat map for Hercules CPU performance statistics
 #
 ############################################################################
 
@@ -15,37 +15,32 @@ import getopt
 import numpy as np
 
 # Patrick's modules
-#from Params import *
 from PlotUtils import *
-#from ParseMeta import *
 
 # Matplotlib modules
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors 
 import matplotlib.cm as cm
 
+# Plot labels
+plotlabels = {'flops':'CPU FLOPs','flops_elapsed':'CPU Time',
+              'flop_rate':'CPU FLOP Rate',
+              'mpi_sent':'Bytes Sent','mpi_recv':'Bytes Received',
+              'mpi_elapsed':'Communication Time'};
+
+# Plot units
+plotunits = {'flops':'GFLOPs','flops_elapsed':'s','flop_rate':'GFLOPs/s',
+             'mpi_sent':'GB','mpi_recv':'GB','mpi_elapsed':'s'};
+
 # Statistics field format
 statformat = {'proc':0,'cpu_flops':1,'cpu_elapsed':2,
-              'gpu_flops':3,'gpu_elapsed':4,
-              'mpi_sent':5,'mpi_recv':6,'mpi_elapsed':7};
-
-# Statistics units
-statunits = {'proc':'PEs','cpu_flops':'FLOPs','cpu_elapsed':'s',
-              'gpu_flops':'FLOPs','gpu_elapsed':'s',
-              'mpi_sent':'bytes','mpi_recv':'bytes','mpi_elapsed':'s'};
-
-# Statistics labels
-statlabels = {'proc':'Processors','cpu_flops':'CPU FLOPs',
-              'cpu_elapsed':'CPU Elapsed Time',
-              'gpu_flops':'GPU FLOPs','gpu_elapsed':'GPU Elapsed Time',
-              'mpi_sent':'MPI Bytes Sent','mpi_recv':'MPI Bytes Received',
-              'mpi_elapsed':'MPI Elapsed Time'};
+              'mpi_sent':3,'mpi_recv':4,'mpi_elapsed':5};
 
 # Plot figure axis position
 PLOT_MAP_LOC = [0.15, 0.2, 0.7, 0.7]
 
-class PlotHeatMap:
-    def __init__(self, outfile, infile, field, cart, title, \
+class PlotHeatMapCPU:
+    def __init__(self, outfile, infile, ptype, cart, title, \
                      color=None, discretize=None, scale=None):
         self.valid = False
         self.outfile = outfile
@@ -62,31 +57,18 @@ class PlotHeatMap:
         self.scale = scale;
 
         # Parse field list
-        ftokens = field.split('/')
-        self.fields = [ftokens[0]]
-        if (len(ftokens) > 1):
-            self.fields.append(ftokens[1])
-            
+        self.ptype = ptype
+        self.punits = plotunits[ptype]
+        self.plabel = plotlabels[ptype]
+        
         # Construct plot title
-        if (len(self.fields) > 1):
-            self.pltitle = "%s %s/%s" % (title, statlabels[self.fields[0]], \
-                                                  statunits[self.fields[1]])
-        else:
-            self.pltitle = "Plot of %s" % (statlabels[self.fields[0]])
+        self.pltitle = "%s %s" % (title, self.plabel)
 
         # Construct color bar title
-        if (len(self.fields) > 1):
-            self.cbtitle = "%s/%s" % (statlabels[self.fields[0]], \
-                                                  statunits[self.fields[1]])
-        else:
-            self.cbtitle = "%s" % (statlabels[self.fields[0]])
+        self.cbtitle = "%s" % (self.plabel)
 
         # Construct color bar units
-        if (len(self.fields) > 1):
-            self.cbunits = "%s/%s" % (statunits[self.fields[0]], \
-                                          statunits[self.fields[1]])
-        else:
-            self.cbunits = "%s" % (statunits[self.fields[0]])
+        self.cbunits = "%s" % (self.punits)
 
         self.valid = True
 
@@ -116,15 +98,27 @@ class PlotHeatMap:
             print "Unexpected number of PE data points in %s" % (self.infile)
             sys.exit(1)
 
-        # Define data array and extract desired field
+        # Define data array and extract desired field(s)
         data = np.arange(numprocs, dtype=float)
         for i in xrange(0, numprocs):
             tokens = lines[i].split()
-            if (len(self.fields) > 1):
-                data[i] = float(tokens[statformat[self.fields[0]]]) \
-                    / float(tokens[statformat[self.fields[1]]])
-            else:
-                data[i] = float(tokens[statformat[self.fields[0]]])
+            if (self.ptype == 'flops'):
+                data[i] = float(tokens[statformat['cpu_flops']]) \
+                    / float(1024*1024*1024)
+            elif (self.ptype == 'flops_elapsed'):
+                data[i] = float(tokens[statformat['cpu_elapsed']])
+            elif (self.ptype == 'flop_rate'):
+                data[i] = float(tokens[statformat['cpu_flops']]) \
+                    / float(tokens[statformat['cpu_elapsed']]) \
+                    / float(1024*1024*1024)
+            elif (self.ptype == 'mpi_sent'):
+                data[i] = float(tokens[statformat[self.ptype]]) \
+                    / float(1024*1024*1024)
+            elif (self.ptype == 'mpi_recv'):
+                data[i] = float(tokens[statformat[self.ptype]]) \
+                    / float(1024*1024*1024)
+            elif (self.ptype == 'mpi_elapsed'):
+                data[i] = float(tokens[statformat[self.ptype]])
 
         data = data.reshape(self.cart[0], self.cart[1])
         return(data)
@@ -171,25 +165,24 @@ class PlotHeatMap:
         plt.show()
         return 0
 
-class PlotHeatMapScript:
+class PlotHeatMapCPUScript:
     def __init__(self, argv):
         self.argc = len(argv)
         self.argv = argv
 
     def usage(self):
-        print "Usage: " + sys.argv[0] + " [-c color] [-d bool,#] [-s min,max] <infile> <field> <cart> <title> <outfile>"
-        print "Example 1: " + sys.argv[0] + " stat-perf.txt cpu_flops 2,2 \"Solver \" plot.png\n"
-        print "Example 2: " + sys.argv[0] + " stat-perf.txt cpu_flops/cpu_elapsed 4,8 \"Solver \" plot.png\n"
+        print "Usage: " + sys.argv[0] + " [-c color] [-d bool,#] [-s min,max] <infile> <plot type> <cart> <title> <outfile>"
+        print "Example 1: " + sys.argv[0] + " stat-perf.txt flops 2,2 \"Solver \" plot.png\n"
+        print "Example 2: " + sys.argv[0] + " stat-perf.txt flop_rate 4,8 \"Solver \" plot.png\n"
         print "\t[-h]: This help message"
         print "\t[-c]: Set custom color bar (default: Spectral_r)"
         print "\t[-d]: Set color bar discretization (default: false,10)"
         print "\t[-s]: Set custom scale"
-        print "\t<infile> : Data source"
-        print "\t<field>  : Field(s) to plot (may specify rate with f1/f2)" 
-        print "\t\tFields : " + str(statformat.keys())
-        print "\t<cart>   : Cartesian grid (eg: 2,2)"
-        print "\t<title>  : Plot title"
-        print "\t<outfile>: Filename for plot\n"
+        print "\t<infile>     : Data source"
+        print "\t<plot type>  : Type of plot (" + str(plotlabels.keys()) + ")"
+        print "\t<cart>       : Cartesian grid for PE layout (eg: 2,2)"
+        print "\t<title>      : Plot title"
+        print "\t<outfile>    : Filename for plot\n"
         sys.exit(1)
 
 
@@ -234,12 +227,16 @@ class PlotHeatMapScript:
             self.usage()
 
         infile = args[0]
-        field = args[1]
+        ptype = args[1]
         cart = args[2]
         title = args[3]
         outfile = args[4]
 
-        prog = PlotHeatMap(outfile, infile, field, cart, title, \
+        if (ptype not in plotlabels.keys()):
+            print "Invalid plot type: %s" % (ptype)
+            return(1)
+
+        prog = PlotHeatMapCPU(outfile, infile, ptype, cart, title, \
                            color, discretize, scale)
         if (prog.isValid() == False):
             return(1)
@@ -251,5 +248,5 @@ class PlotHeatMapScript:
 
 if __name__ == '__main__':
 
-    prog = PlotHeatMapScript(sys.argv)
+    prog = PlotHeatMapCPUScript(sys.argv)
     sys.exit(prog.main())
