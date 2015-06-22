@@ -98,10 +98,19 @@ class PlotHeatMapCPU:
             print "Unexpected number of PE data points in %s" % (self.infile)
             sys.exit(1)
 
+        cpu_flops = np.zeros(numprocs, dtype=np.float64)
+        cpu_elapsed = np.zeros(numprocs, dtype=np.float64)
+        flop_rate = np.zeros(numprocs, dtype=np.float64)
+        mpi_sent = np.zeros(numprocs, dtype=np.float64)
+        mpi_recv = np.zeros(numprocs, dtype=np.float64)
+        mpi_elapsed = np.zeros(numprocs, dtype=np.float64)
+
         # Define data array and extract desired field(s)
         data = np.arange(numprocs, dtype=float)
         for i in xrange(0, numprocs):
             tokens = lines[i].split()
+
+            # Parse data for plot
             if (self.ptype == 'flops'):
                 data[i] = float(tokens[statformat['cpu_flops']]) \
                     / float(1024*1024*1024)
@@ -120,7 +129,28 @@ class PlotHeatMapCPU:
             elif (self.ptype == 'mpi_elapsed'):
                 data[i] = float(tokens[statformat[self.ptype]])
 
+            # Parse data for statistics
+            cpu_flops[i] =  float(tokens[statformat['cpu_flops']]) / float(1024*1024*1024)
+            cpu_elapsed[i] =  float(tokens[statformat['cpu_elapsed']])
+            if (cpu_elapsed[i] > 0.0):
+                flop_rate[i] = (cpu_flops[i]/cpu_elapsed[i])
+            else:
+                flop_rate[i] = 0
+            mpi_sent[i] =  float(tokens[statformat['mpi_sent']]) / float(1024*1024*1024)
+            mpi_recv[i] =  float(tokens[statformat['mpi_recv']]) / float(1024*1024*1024)
+            mpi_elapsed[i] =  float(tokens[statformat['mpi_elapsed']])
+
         data = data.reshape(self.cart[0], self.cart[1])
+
+        # Dump statistics
+        print "Statistics (min, max, mean, var, std):"
+        print "CPU FLOPs (GF)\t%12.2f%12.2f%12.2f%12.2f%12.2f" % (np.amin(cpu_flops), np.amax(cpu_flops), np.mean(cpu_flops), np.var(cpu_flops), np.std(cpu_flops)) 
+        print "CPU Elapsed (s)\t%12.2f%12.2f%12.2f%12.2f%12.2f" % (np.amin(cpu_elapsed), np.amax(cpu_elapsed), np.mean(cpu_elapsed), np.var(cpu_elapsed), np.std(cpu_elapsed)) 
+        print "FLOP Rate(GF/s)\t%12.2f%12.2f%12.2f%12.2f%12.2f" % (np.amin(flop_rate), np.amax(flop_rate), np.mean(flop_rate), np.var(flop_rate), np.std(flop_rate)) 
+        print "MPI Sent (GB)\t%12.2f%12.2f%12.2f%12.2f%12.2f" % (np.amin(mpi_sent), np.amax(mpi_sent), np.mean(mpi_sent), np.var(mpi_sent), np.std(mpi_sent)) 
+        print "MPI Recv (GB)\t%12.2f%12.2f%12.2f%12.2f%12.2f" % (np.amin(mpi_recv), np.amax(mpi_recv), np.mean(mpi_recv), np.var(mpi_recv), np.std(mpi_recv)) 
+        print "MPI Elapsed (s)\t%12.2f%12.2f%12.2f%12.2f%12.2f" % (np.amin(mpi_elapsed), np.amax(mpi_elapsed), np.mean(mpi_elapsed), np.var(mpi_elapsed), np.std(mpi_elapsed)) 
+
         return(data)
 
     def main(self):
